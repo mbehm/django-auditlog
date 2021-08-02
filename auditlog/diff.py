@@ -139,7 +139,7 @@ def model_instance_diff(old, new):
         new_value = get_field_value(new, field)
 
         if old_value != new_value:
-            diff[field.name] = (smart_str(old_value), smart_str(new_value))
+            diff[field.name] = (smart_str(old_value), smart_str(new_value)) if field.name not in model_fields["mask_fields"] else ("<redacted>", "<redacted>")
 
     if len(diff) == 0:
         diff = None
