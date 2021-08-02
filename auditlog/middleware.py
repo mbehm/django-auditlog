@@ -36,20 +36,17 @@ class AuditlogMiddleware(MiddlewareMixin):
             ).split(",")[0]
 
         # Connect signal for automatic logging
-        if hasattr(request, "user") and getattr(
-            request.user, "is_authenticated", False
-        ):
-            set_actor = partial(
-                self.set_actor,
-                user=request.user,
-                signal_duid=threadlocal.auditlog["signal_duid"],
-            )
-            pre_save.connect(
-                set_actor,
-                sender=LogEntry,
-                dispatch_uid=threadlocal.auditlog["signal_duid"],
-                weak=False,
-            )
+        set_request_info = partial(
+            self.set_request_info,
+            request=request,
+            signal_duid=threadlocal.auditlog["signal_duid"],
+        )
+        pre_save.connect(
+            set_request_info,
+            sender=LogEntry,
+            dispatch_uid=threadlocal.auditlog["signal_duid"],
+            weak=False,
+        )
 
     def process_response(self, request, response):
         """
@@ -74,14 +71,17 @@ class AuditlogMiddleware(MiddlewareMixin):
         return None
 
     @staticmethod
-    def set_actor(user, sender, instance, signal_duid, **kwargs):
+    def set_request_info(request, sender, instance, signal_duid, **kwargs):
         """
-        Signal receiver with an extra, required 'user' kwarg. This method becomes a real (valid) signal receiver when
-        it is curried with the actor.
+        Signal receiver with an extra, required 'request' kwarg. This method becomes a real (valid)
+        signal receiver when it is curried with the request.
         """
-        if hasattr(threadlocal, "auditlog"):
-            if signal_duid != threadlocal.auditlog["signal_duid"]:
-                return
+        if not hasattr(threadlocal, "auditlog") or signal_duid != threadlocal.auditlog["signal_duid"]:
+            return
+
+        instance.remote_addr = threadlocal.auditlog["remote_addr"]
+        if hasattr(request, 'user'):
+            user = request.user
             try:
                 app_label, model_name = settings.AUTH_USER_MODEL.split(".")
                 auth_user_model = apps.get_model(app_label, model_name)
@@ -93,5 +93,3 @@ class AuditlogMiddleware(MiddlewareMixin):
                 and instance.actor is None
             ):
                 instance.actor = user
-
-            instance.remote_addr = threadlocal.auditlog["remote_addr"]
